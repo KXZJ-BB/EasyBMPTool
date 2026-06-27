@@ -3994,30 +3994,21 @@
                         input.addEventListener('keydown', ev => { if (ev.key === 'Enter') save(); });
                     });
                 });
-                // 配色卡色块单击改颜色
+                // 配色卡色块单击改颜色（使用 showColorPopover，与自定义色换色逻辑一致）
                 panelContent.querySelectorAll('[data-edit-yarn-color]').forEach(el => {
                     el.addEventListener('click', function(e) {
                         e.stopPropagation();
                         const idx = parseInt(this.dataset.editYarnColor);
                         const yc = APP.yarnColors[idx];
                         if (!yc) return;
-                        const rect = this.getBoundingClientRect();
-                        const picker = document.createElement('input');
-                        picker.type = 'color';
-                        picker.value = yc.hex;
-                        picker.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.bottom + 2}px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:99999;`;
-                        document.body.appendChild(picker);
-                        picker.addEventListener('input', () => {
-                            yc.hex = picker.value;
-                            this.style.background = picker.value;
-                        });
-                        picker.addEventListener('change', () => {
-                            yc.hex = picker.value;
-                            picker.remove();
+                        showColorPopover(this, yc.hex, (liveHex) => {
+                            yc.hex = liveHex;
+                            this.style.background = liveHex;
+                        }, (finalHex) => {
+                            if (!finalHex) return;
+                            yc.hex = finalHex;
                             renderAll();
                         });
-                        picker.addEventListener('blur', () => { picker.remove(); renderAll(); });
-                        requestAnimationFrame(() => picker.click());
                     });
                 });
                 panelContent.querySelectorAll('.yarn-del-btn').forEach(btn => {
@@ -4045,14 +4036,11 @@
                 modalContent.innerHTML = `<h3>新建配色</h3>
   <div class="modal-row">
     <label>颜色</label>
-    <input type="color" id="new-yarn-color-picker" value="#ff0000" style="width:36px;height:26px;flex-shrink:0;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:transparent;">
+    <input type="color" id="new-yarn-color-picker" value="#ff0000" style="width:36px;height:26px;flex:0 0 auto;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:transparent;">
+    <input type="text" id="new-yarn-hex" value="#ff0000" maxlength="7" style="width:80px;flex:0 0 auto;font-family:monospace;padding:0 4px;">
   </div>
   <div class="modal-row">
-    <label>HEX色值</label>
-    <input type="text" id="new-yarn-hex" value="#ff0000" maxlength="7" style="font-family:monospace;">
-  </div>
-  <div class="modal-row">
-    <label>色卡名称</label>
+    <label>名称</label>
     <input type="text" id="new-yarn-name" value="自定义色${previewNum}">
   </div>
   <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;"><button class="tb-btn accent" id="new-yarn-confirm">确认</button><button class="tb-btn" id="new-yarn-cancel">取消</button></div>`;
@@ -4853,7 +4841,7 @@
                             const isLocked = APP.lockedReplacerColors.has(u.hex.toLowerCase());
                             h += `<div class="replacer-row${isLocked ? ' locked' : ''}" data-r="${u.r}" data-g="${u.g}" data-b="${u.b}" data-hex="${u.hex.toLowerCase()}">
           <button class="replacer-lock-btn${isLocked ? ' locked' : ''}" title="${isLocked ? '点击解锁此颜色（配色时不替换）' : '点击锁定此颜色（配色时跳过）'}"></button>
-          <div class="replacer-swatch" style="background:${u.hex};" title="${isLocked ? '已锁定' : '点击修改颜色'}"><input type="color" class="replacer-color-input" value="${u.hex}" ${isLocked ? 'disabled' : ''}></div>
+          <div class="replacer-swatch" style="background:${u.hex};" title="${isLocked ? '已锁定' : '单击修改颜色'}"></div>
         </div>`;
                         });
                         h += '</div>';
@@ -5263,7 +5251,6 @@
                         const origHex = row.dataset.hex;
                         const lockBtn = row.querySelector('.replacer-lock-btn');
                         const swatch = row.querySelector('.replacer-swatch');
-                        const colorInput = row.querySelector('.replacer-color-input');
                         lockBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
                             const key = origHex;
@@ -5275,21 +5262,19 @@
                             renderRightPanel();
                         });
                         swatch.addEventListener('click', (e) => {
+                            e.stopPropagation();
                             if (APP.lockedReplacerColors.has(origHex)) return;
-                            if (e.target === colorInput) return;
-                            colorInput.click();
-                        });
-                        colorInput.addEventListener('input', () => {
-                            if (APP.lockedReplacerColors.has(origHex)) return;
-                            const newHex = colorInput.value;
-                            swatch.style.background = newHex;
-                            const nr = hexToRgb(newHex);
-                            if (nr) replaceColorAcrossLayers(r, g, b, nr.r, nr.g, nr.b);
-                        });
-                        colorInput.addEventListener('change', () => {
-                            if (APP.lockedReplacerColors.has(origHex)) return;
-                            pushHistory();
-                            renderAll();
+                            showColorPopover(swatch, origHex, (liveHex) => {
+                                swatch.style.background = liveHex;
+                            }, (finalHex) => {
+                                if (!finalHex || finalHex === origHex) return;
+                                const nr = hexToRgb(finalHex);
+                                if (nr) {
+                                    pushHistory();
+                                    replaceColorAcrossLayers(r, g, b, nr.r, nr.g, nr.b);
+                                    renderAll();
+                                }
+                            });
                         });
                         row.addEventListener('click', (e) => {
                             if (e.target.closest('.replacer-lock-btn') || e.target.closest('.replacer-swatch') || e.target.closest('.replacer-color-input')) return;
