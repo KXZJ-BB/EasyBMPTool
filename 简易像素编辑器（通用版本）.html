@@ -778,10 +778,6 @@
             background: var(--danger);
             color: #fff;
         }
-            background: var(--danger);
-            color: #fff;
-            border-color: var(--danger);
-        }
         .color-item {
             display: flex;
             align-items: center;
@@ -4058,17 +4054,64 @@
                 };
             }
 
-            function showAddColorDialog() {
+            // 删除自定义颜色
+            function removeCustomColor(hex) {
+                hex = (hex || '').toLowerCase();
+                const idx = APP.customColors.indexOf(hex);
+                if (idx >= 0) APP.customColors.splice(idx, 1);
+                if (APP.brushColor === hex) APP.brushColor = APP.customColors[0] || '#000000';
+                renderRightPanel();
+            }
+
+            // 添加自定义颜色到调色板
+            function addCustomColor(hex) {
+                hex = hex.toLowerCase();
+                if (!APP.customColors.includes(hex)) {
+                    APP.customColors.push(hex);
+                }
+                APP.brushColor = hex;
+                renderRightPanel();
+            }
+
+            // 启动吸取颜色模式：关闭弹窗，进入画布吸取等待状态
+            function startCustomColorPick() {
+                modalOverlay.classList.remove('show');
+                APP.awaitingCustomColorPick = true;
+                canvasScroll.style.cursor = 'crosshair';
+            }
+
+            // 处理在画布上吸取到的颜色：填回弹窗并重新打开
+            function handleCustomColorPick(x, y) {
+                APP.awaitingCustomColorPick = false;
+                canvasScroll.style.cursor = APP.tool === 'hand' ? 'grab' : 'crosshair';
+                // 默认使用画布背景色
+                let pickedHex = (APP.bgColor && /^#[0-9a-fA-F]{6}$/.test(APP.bgColor)) ? APP.bgColor : '#ffffff';
+                if (x >= 0 && x < APP.canvasW && y >= 0 && y < APP.canvasH) {
+                    const composite = getCompositeImageData();
+                    const idx = (y * APP.canvasW + x) * 4;
+                    if (composite.data[idx + 3] > 0) {
+                        // 有不透明像素时取像素色，否则保留背景色
+                        pickedHex = rgbToHex(composite.data[idx], composite.data[idx + 1], composite.data[idx + 2]);
+                    }
+                }
+                showAddColorDialog(pickedHex);
+            }
+
+            function showAddColorDialog(initHex) {
+                const startHex = (initHex && /^#[0-9a-fA-F]{6}$/.test(initHex)) ? initHex : '#ff0000';
                 modalContent.innerHTML = `<h3>新建颜色</h3>
       <div class="modal-row">
         <label>颜色</label>
-        <input type="color" id="new-color-picker" value="#ff0000" style="width:40px;flex:0 0 auto;padding:0;">
-        <input type="text" id="new-color-hex" value="#ff0000" maxlength="7" style="flex:1;min-width:0;max-width:100px;">
+        <input type="color" id="new-color-picker" value="${startHex}" style="width:40px;height:26px;flex:0 0 auto;padding:1px;border:1px solid var(--border);border-radius:3px;cursor:pointer;">
+        <input type="text" id="new-color-hex" value="${startHex}" maxlength="7" style="flex:1;min-width:0;max-width:100px;">
       </div>
-      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
-        <button class="tb-btn" id="btn-pick-color">吸取</button>
-        <button class="tb-btn" id="new-color-cancel">取消</button>
-        <button class="tb-btn accent" id="new-color-confirm">确认</button>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <span style="width:50px;flex-shrink:0;"></span>
+        <button class="btn-sm" id="btn-pick-color" style="width:40px;flex-shrink:0;padding:3px 2px;text-align:center;">吸取</button>
+        <div style="flex:1;min-width:0;max-width:100px;display:flex;justify-content:flex-end;gap:6px;">
+          <button class="tb-btn" id="new-color-cancel">取消</button>
+          <button class="tb-btn accent" id="new-color-confirm">确认</button>
+        </div>
       </div>`;
                 modalOverlay.classList.add('show');
                 const colorPicker = document.getElementById('new-color-picker');
@@ -4959,22 +5002,14 @@
                         if (e.target.classList.contains('color-del-btn')) return;
                         const oldHex = this.dataset.color;
                         if (!APP.customColors.includes(oldHex)) return; // 只允许改自定义色
-                        const picker = document.createElement('input');
-                        picker.type = 'color';
-                        picker.value = oldHex;
-                        picker.style.cssText = 'position:absolute;opacity:0;width:0;height:0;';
-                        document.body.appendChild(picker);
-                        const self = this;
-                        picker.addEventListener('change', () => {
-                            const newHex = picker.value;
+                        showColorPopover(this, oldHex, null, (newHex) => {
+                            if (!newHex || !/^#[0-9a-fA-F]{6}$/.test(newHex)) return;
+                            newHex = newHex.toLowerCase();
                             const ci = APP.customColors.indexOf(oldHex);
                             if (ci >= 0) APP.customColors[ci] = newHex;
                             if (APP.brushColor === oldHex) APP.brushColor = newHex;
-                            picker.remove();
                             renderAll();
                         });
-                        picker.addEventListener('blur', () => picker.remove());
-                        picker.click();
                     }));
                     rightPanel.querySelectorAll('.color-del-btn').forEach(btn => {
                         btn.addEventListener('click', function(e) {
